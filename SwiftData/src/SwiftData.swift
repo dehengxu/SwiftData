@@ -26,10 +26,6 @@ import Foundation
 import UIKit
 import SQLite3
 
-public enum SwiftDataError: Error {
-	case SQLITE3(code: Int32)
-}
-
 // MARK: - SwiftData
 public struct SwiftData {
 
@@ -358,7 +354,7 @@ public struct SwiftData {
      :returns:     The error message relating to the provided error code
      */
     public static func errorMessageForCode(code: Int) -> String {
-        return SwiftData.SDError.errorMessageFromCode(errorCode: code)
+        return SwiftData.SDError.message(code: code)
     }
 
     /**
@@ -716,12 +712,12 @@ public struct SwiftData {
 			let status = sqlite3_open_v2(dbPath.cString(using: .utf8)!, &sqliteDB, inFlags, nil)
 			if status != SQLITE_OK {
 				print("SwiftData Error -> During: Opening Database")
-				print("                -> Code: \(status) - " + SDError.errorMessageFromCode(errorCode: Int(status)))
+				print("                -> Code: \(status) - " + SDError.message(code: Int(status)))
 				if let sqliteDB = SQLiteDB.sharedInstance.sqliteDB {
 					let errMsg = String(cString: sqlite3_errmsg(sqliteDB))
 					print("                -> Details: \(errMsg)")
 				}
-				throw SwiftDataError.SQLITE3(code: status)
+				throw SDError.SQLITE3(code: Int(status))
 			}
 			isConnected = true
 			return
@@ -739,7 +735,7 @@ public struct SwiftData {
             let status = sqlite3_open(dbPath.cString(using: .utf8)!, &sqliteDB)
             if status != SQLITE_OK {
                 print("SwiftData Error -> During: Opening Database")
-                print("                -> Code: \(status) - " + SDError.errorMessageFromCode(errorCode: Int(status)))
+                print("                -> Code: \(status) - " + SDError.message(code: Int(status)))
                 if let sqliteDB = SQLiteDB.sharedInstance.sqliteDB {
                     let errMsg = String(cString: sqlite3_errmsg(sqliteDB))
                     print("                -> Details: \(errMsg)")
@@ -777,7 +773,7 @@ public struct SwiftData {
             let status = sqlite3_open_v2(dbPath.cString(using: .utf8)!, &sqliteDB, flags, nil)
             if status != SQLITE_OK {
                 print("SwiftData Error -> During: Opening Database with Flags")
-                print("                -> Code: \(status) - " + SDError.errorMessageFromCode(errorCode: Int(status)))
+                print("                -> Code: \(status) - " + SDError.message(code: Int(status)))
                 if let sqliteDB = SQLiteDB.sharedInstance.sqliteDB {
                     let errMsg = String(cString: sqlite3_errmsg(sqliteDB))
                     print("                -> Details: \(errMsg)")
@@ -802,7 +798,7 @@ public struct SwiftData {
             let status = sqlite3_close(sqliteDB)
             if status != SQLITE_OK {
                 print("SwiftData Error -> During: Closing Database")
-                print("                -> Code: \(status) - " + SDError.errorMessageFromCode(errorCode: Int(status)))
+                print("                -> Code: \(status) - " + SDError.message(code: Int(status)))
                 if let sqliteDB = SQLiteDB.sharedInstance.sqliteDB {
                     let errMsg = String(cString: sqlite3_errmsg(sqliteDB))
                     print("                -> Details: \(errMsg)")
@@ -837,7 +833,7 @@ public struct SwiftData {
             openWithFlags = false
             if status != SQLITE_OK {
                 print("SwiftData Error -> During: Closing Database with Flags")
-                print("                -> Code: \(status) - " + SDError.errorMessageFromCode(errorCode: Int(status)))
+				print("                -> Code: \(status) - " + SDError.message(code: Int(status)))
                 if let sqliteDB = SQLiteDB.sharedInstance.sqliteDB {
                     let errMsg = String(cString: sqlite3_errmsg(sqliteDB))
                     print("                -> Details: \(errMsg)")
@@ -1003,7 +999,7 @@ public struct SwiftData {
             var status = sqlite3_prepare_v2(SQLiteDB.sharedInstance.sqliteDB, sql, -1, &pStmt, nil)
             if status != SQLITE_OK {
                 print("SwiftData Error -> During: SQL Prepare")
-                print("                -> Code: \(status) - " + SDError.errorMessageFromCode(errorCode: Int(status)))
+				print("                -> Code: \(status) - " + SDError.message(code: Int(status)))
                 if let sqliteDB = SQLiteDB.sharedInstance.sqliteDB {
                     let errMsg = String(cString: sqlite3_errmsg(sqliteDB))
                     print("                -> Details: \(errMsg)")
@@ -1014,7 +1010,7 @@ public struct SwiftData {
             status = sqlite3_step(pStmt)
             if status != SQLITE_DONE && status != SQLITE_OK {
                 print("SwiftData Error -> During: SQL Step")
-                print("                -> Code: \(status) - " + SDError.errorMessageFromCode(errorCode: Int(status)))
+				print("                -> Code: \(status) - " + SDError.message(code: Int(status)))
                 if let db = sqlite3_errmsg(SQLiteDB.sharedInstance.sqliteDB) {
                     let errMsg = String(cString: db)
                     print("                -> Details: \(errMsg)")
@@ -1044,7 +1040,7 @@ public struct SwiftData {
             var status = sqlite3_prepare_v2(SQLiteDB.sharedInstance.sqliteDB, sql, -1, &pStmt, nil)
             if status != SQLITE_OK {
                 print("SwiftData Error -> During: SQL Prepare")
-                print("                -> Code: \(status) - " + SDError.errorMessageFromCode(errorCode: Int(status)))
+				print("                -> Code: \(status) - " + SDError.message(code: Int(status)))
                 if let db = SQLiteDB.sharedInstance.sqliteDB {
                     let errMsg = String(cString: sqlite3_errmsg(db))
                     print("                -> Details: \(errMsg)")
@@ -1062,8 +1058,8 @@ public struct SwiftData {
                     var i: Int32 = 0
                     while i < columnCount {
                         let columnName = String(cString: sqlite3_column_name(pStmt, i))
-                        let columnType = "\(sqlite3_column_decltype(pStmt, i))".uppercased()
-                        if columnType != nil && !columnType.isEmpty {
+						let columnType = "\(String(describing: sqlite3_column_decltype(pStmt, i)))".uppercased()
+                        if !columnType.isEmpty {
                             if let columnValue: AnyObject = getColumnValue(statement: pStmt!, index: i, type: columnType) {
                                 row[columnName] = SDColumn(obj: columnValue)
                             }
@@ -1097,7 +1093,7 @@ public struct SwiftData {
                     next = false
                 } else {
                     print("SwiftData Error -> During: SQL Step")
-                    print("                -> Code: \(status) - " + SDError.errorMessageFromCode(errorCode: Int(status)))
+					print("                -> Code: \(status) - " + SDError.message(code: Int(status)))
                     if let db = sqlite3_errmsg(SQLiteDB.sharedInstance.sqliteDB) {
                         let errMsg = String(cString: db)
                         print("                -> Details: \(errMsg)")
@@ -1221,16 +1217,7 @@ public struct SwiftData {
 
     }
 
-
-    // MARK: - Error Handling
-
-    //NOTE: remove private level
-    struct SDError {
-
-    }
-
 }
-
 
 // MARK: - Threading
 extension SwiftData {
@@ -1579,136 +1566,6 @@ extension SwiftData.SQLiteDB {
             }
         }
         return (indexArr, nil)
-
-    }
-
-}
-
-
-// MARK: - SDError Functions
-extension SwiftData.SDError {
-
-    //get the error message from the error code
-    //NOTE: remove private level
-    static func errorMessageFromCode(errorCode: Int) -> String {
-
-        switch errorCode {
-
-                //no error
-
-            case -1:
-                return "No error"
-
-                //SQLite error codes and descriptions as per: http://www.sqlite.org/c3ref/c_abort.html
-            case 0:
-                return "Successful result"
-            case 1:
-                return "SQL error or missing database"
-            case 2:
-                return "Internal logic error in SQLite"
-            case 3:
-                return "Access permission denied"
-            case 4:
-                return "Callback routine requested an abort"
-            case 5:
-                return "The database file is locked"
-            case 6:
-                return "A table in the database is locked"
-            case 7:
-                return "A malloc() failed"
-            case 8:
-                return "Attempt to write a readonly database"
-            case 9:
-                return "Operation terminated by sqlite3_interrupt()"
-            case 10:
-                return "Some kind of disk I/O error occurred"
-            case 11:
-                return "The database disk image is malformed"
-            case 12:
-                return "Unknown opcode in sqlite3_file_control()"
-            case 13:
-                return "Insertion failed because database is full"
-            case 14:
-                return "Unable to open the database file"
-            case 15:
-                return "Database lock protocol error"
-            case 16:
-                return "Database is empty"
-            case 17:
-                return "The database schema changed"
-            case 18:
-                return "String or BLOB exceeds size limit"
-            case 19:
-                return "Abort due to constraint violation"
-            case 20:
-                return "Data type mismatch"
-            case 21:
-                return "Library used incorrectly"
-            case 22:
-                return "Uses OS features not supported on host"
-            case 23:
-                return "Authorization denied"
-            case 24:
-                return "Auxiliary database format error"
-            case 25:
-                return "2nd parameter to sqlite3_bind out of range"
-            case 26:
-                return "File opened that is not a database file"
-            case 27:
-                return "Notifications from sqlite3_log()"
-            case 28:
-                return "Warnings from sqlite3_log()"
-            case 100:
-                return "sqlite3_step() has another row ready"
-            case 101:
-                return "sqlite3_step() has finished executing"
-
-                //custom SwiftData errors
-                //->binding errors
-
-            case 201:
-                return "Not enough objects to bind provided"
-            case 202:
-                return "Too many objects to bind provided"
-            case 203:
-                return "Object to bind as identifier must be a String"
-
-                //->custom connection errors
-            case 301:
-                return "A custom connection is already open"
-            case 302:
-                return "Cannot open a custom connection inside a transaction"
-            case 303:
-                return "Cannot open a custom connection inside a savepoint"
-            case 304:
-                return "A custom connection is not currently open"
-            case 305:
-                return "Cannot close a custom connection inside a transaction"
-            case 306:
-                return "Cannot close a custom connection inside a savepoint"
-
-                //->index and table errors
-
-            case 401:
-                return "At least one column name must be provided"
-            case 402:
-                return "Error extracting index names from sqlite_master"
-            case 403:
-                return "Error extracting table names from sqlite_master"
-
-                //->transaction and savepoint errors
-
-            case 501:
-                return "Cannot begin a transaction within a savepoint"
-            case 502:
-                return "Cannot begin a transaction within another transaction"
-
-                //unknown error
-
-            default:
-                //what the fuck happened?!?
-                return "Unknown error"
-        }
 
     }
 
