@@ -9,27 +9,31 @@ import Foundation
 
 // MARK: - Error Handling
 
-extension SD {
+public extension SwiftData {
 
-	public enum SDError: Error {
+	enum SDError: Error {
 		case SQLITE3(code: Int)
+		case SQLITE(code: Int32)
 
-		func message() -> String {
+		public func message() -> String {
 			return SD.message(error: self)
 		}
 	}
 
 	static func message(error: SDError) -> String {
-		guard case SDError.SQLITE3(let code) = error else {
+		if case SDError.SQLITE3(let code) = error {
+			return SDError.message(code: code)
+		} else if case SDError.SQLITE(let code) = error {
+			return SDError.message(code: Int(code))
+		} else {
 			return "Not sqlite3 error \(error)"
 		}
-		return SDError.message(code: code)
 	}
 
 }
 
 // MARK: - SDError Functions
-extension SD.SDError {
+extension SwiftData.SDError {
 
 	//get the error message from the error code
 	//NOTE: remove private level
