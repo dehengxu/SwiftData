@@ -676,16 +676,11 @@ public struct SwiftData {
 
     // MARK: - SQLiteDB Class
     //NOTE: remove private level
-    class SQLiteDB {
+    public class SQLiteDB {
 
-        class var sharedInstance: SQLiteDB {
-            struct Singleton {
-                static let instance = SQLiteDB()
-            }
-            return Singleton.instance
-        }
+        public static let sharedInstance: SQLiteDB = SQLiteDB()
         var sqliteDB: OpaquePointer? = nil
-        var dbPath = SQLiteDB.createPath()
+        public var dbPath = SQLiteDB.createPath()
         var inTransaction = false
         var isConnected = false
         var openWithFlags = false
