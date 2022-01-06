@@ -26,6 +26,9 @@ import Foundation
 import UIKit
 import SQLite3
 
+public enum SwiftDataError: Error {
+	case SQLITE3(code: Int32)
+}
 
 // MARK: - SwiftData
 public struct SwiftData {
@@ -688,8 +691,41 @@ public struct SwiftData {
         //let queue = dispatch_queue_create("SwiftData.DatabaseQueue", DISPATCH_QUEUE_SERIAL)
         let queue = DispatchQueue(label: "SwiftData.DatabaseQueue")
 
+		public init() {
+			
+		}
 
         // MARK: - Database Handling Functions
+
+		/// Open db
+		/// - Parameter flags: SQLITE_OPEN_FLAGS
+		/// - Returns: Void
+		public func open(_ flags: [Int32] = [SQLITE_OPEN_CREATE, SQLITE_OPEN_READWRITE]) throws -> Void {
+
+			if inTransaction || openWithFlags || savepointsOpen > 0 {
+				return
+			}
+			if sqliteDB != nil || isConnected {
+				return
+			}
+			var inFlags: Int32 = 0
+			for flag in flags {
+				inFlags |= flag
+			}
+			// SQLITE_OPEN_CREATE, SQLITE_OPEN_READWRITE
+			let status = sqlite3_open_v2(dbPath.cString(using: .utf8)!, &sqliteDB, inFlags, nil)
+			if status != SQLITE_OK {
+				print("SwiftData Error -> During: Opening Database")
+				print("                -> Code: \(status) - " + SDError.errorMessageFromCode(errorCode: Int(status)))
+				if let sqliteDB = SQLiteDB.sharedInstance.sqliteDB {
+					let errMsg = String(cString: sqlite3_errmsg(sqliteDB))
+					print("                -> Details: \(errMsg)")
+				}
+				throw SwiftDataError.SQLITE3(code: status)
+			}
+			isConnected = true
+			return
+		}
 
         //open a connection to the sqlite3 database
         func open() -> Int? {
