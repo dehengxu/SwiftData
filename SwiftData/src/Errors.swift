@@ -11,20 +11,13 @@ import Foundation
 
 public extension SwiftData {
 
-	enum SDError: Error {
-		case SQLITE3(code: Int)
-		case SQLITE(code: Int32)
-
-		public func message() -> String {
-			return SD.message(error: self)
-		}
-	}
+    enum SDError: Error {
+		case SQLITE(code: Int)
+    }
 
 	static func message(error: SDError) -> String {
-		if case SDError.SQLITE3(let code) = error {
+		if case SDError.SQLITE(let code) = error {
 			return SDError.message(code: code)
-		} else if case SDError.SQLITE(let code) = error {
-			return SDError.message(code: Int(code))
 		} else {
 			return "Not sqlite3 error \(error)"
 		}
@@ -33,13 +26,20 @@ public extension SwiftData {
 }
 
 // MARK: - SDError Functions
-extension SwiftData.SDError {
+extension SD.SDError {
+
+    public func message() -> String {
+        return SD.message(error: self)
+    }
+
+    public static func error<T>(code: T) -> SD.SDError where T: SignedInteger {
+        return .SQLITE(code: Int(code))
+    }
 
 	//get the error message from the error code
 	//NOTE: remove private level
-	static func message(code: Int) -> String {
-
-		switch code {
+    public static func message<T>(code: T) -> String where T: SignedInteger {
+		switch Int(code) {
 
 				//no error
 
