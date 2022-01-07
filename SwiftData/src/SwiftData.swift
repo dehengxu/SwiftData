@@ -49,18 +49,16 @@ public struct SwiftData {
 
      :returns:       An Int with the error code, or nil if there was no error
      */
-    public static func executeChange(sqlStr: String) throws -> Void {
+    public static func executeChange(_ db: SQLiteDB = .sharedInstance, sqlStr: String) throws -> Void {
 
         let task: () throws -> Void = {
 			defer {
-				SQLiteDB.sharedInstance.close()
+                db.close()
 			}
-			if let err = SQLiteDB.sharedInstance.open() {
-				throw SD.SDError.SQLITE3(code: err)
-			}
-            try SQLiteDB.sharedInstance.executeChange(sqlStr: sqlStr)
+			try db.open()
+            try db.executeChange(sqlStr: sqlStr)
         }
-        try putOnThread(task: task)
+        try putOnThread(db, task: task)
 
     }
 
@@ -86,19 +84,26 @@ public struct SwiftData {
 
      :returns:         An Int with the error code, or nil if there was no error
      */
-    public static func executeChange(sqlStr: String, withArgs: [AnyObject]) throws -> Void {
+    public static func executeChange(_ db: SQLiteDB = .sharedInstance, sqlStr: String, withArgs: [AnyObject]) throws -> Void {
 
         let task: () throws ->Void = {
 			defer {
-				SQLiteDB.sharedInstance.close()
+				db.close()
 			}
-			if let err = SQLiteDB.sharedInstance.open() {
-				throw SD.SDError.SQLITE3(code: err)
-			}
-            try SQLiteDB.sharedInstance.executeChange(sqlStr: sqlStr, withArgs: withArgs)
+			try db.open()
+            try db.executeChange(sqlStr: sqlStr, withArgs: withArgs)
         }
-        try putOnThread(task: task)
+        try putOnThread(db, task: task)
 
+    }
+
+    private static func find<T>(_ array:[T], _ target: T) -> Int? where T: Equatable {
+        for index in 0..<array.count {
+            if array[index] == target {
+                return index
+            }
+        }
+        return nil
     }
 
     /**
@@ -111,32 +116,35 @@ public struct SwiftData {
 
      :returns:       An Int with the error code, or nil if there was no error
      */
-#if false
-    public static func executeMultipleChanges(sqlArr: [String]) -> Int? {
+    public static func executeMultipleChanges(_ db: SQLiteDB = .sharedInstance, sqlArr: [String]) throws -> Void {
 
-        var error: Int? = nil
-        let task: ()->Void = {
-            if let err = SQLiteDB.sharedInstance.open() {
-                error = err
-                return
+        let task: () throws -> Void = {
+            try db.open()
+            defer {
+                db.close()
             }
             for sqlStr in sqlArr {
-                if let err = SQLiteDB.sharedInstance.executeChange(sqlStr: sqlStr) {
-                    SQLiteDB.sharedInstance.close()
+                do {
+                    try db.executeChange(sqlStr: sqlStr)
+                } catch {
                     if let index = find(sqlArr, sqlStr) {
                         print("Error occurred on array item: \(index) -> \"\(sqlStr)\"")
                     }
-                    error = err
-                    return
+                    throw error
                 }
+//                if let err = SQLiteDB.sharedInstance.executeChange(sqlStr: sqlStr) {
+//                    SQLiteDB.sharedInstance.close()
+//                    if let index = find(sqlArr, sqlStr) {
+//                        print("Error occurred on array item: \(index) -> \"\(sqlStr)\"")
+//                    }
+//                    error = err
+//                    return
+//                }
             }
-            SQLiteDB.sharedInstance.close()
         }
-        putOnThread(task: task)
-        return error
+        try putOnThread(db, task: task)
 
     }
-#endif
 
     /**
      Execute a SQLite query statement (e.g. SELECT)
@@ -156,19 +164,17 @@ public struct SwiftData {
 
      :returns:       A tuple containing an Array of "SDRow"s, and an Int with the error code or nil if there was no error
      */
-    public static func executeQuery(sqlStr: String) throws -> [SDRow] {
+    public static func executeQuery(_ db: SQLiteDB = .sharedInstance, sqlStr: String) throws -> [SDRow] {
 
         var result = [SDRow] ()
         let task: () throws -> Void = {
 			defer {
-				SQLiteDB.sharedInstance.close()
+				db.close()
 			}
-			if let err = SQLiteDB.sharedInstance.open() {
-				throw SD.SDError.SQLITE3(code: err)
-			}
-            result = try SQLiteDB.sharedInstance.executeQuery(sqlStr: sqlStr)
+			try db.open()
+            result = try db.executeQuery(sqlStr: sqlStr)
         }
-        try putOnThread(task: task)
+        try putOnThread(db, task: task)
         return result
 
     }
@@ -186,19 +192,17 @@ public struct SwiftData {
 
      :returns:       A tuple containing an Array of "SDRow"s, and an Int with the error code or nil if there was no error
      */
-    public static func executeQuery(sqlStr: String, withArgs: [AnyObject]) throws -> [SDRow] {
+    public static func executeQuery(_ db: SQLiteDB = .sharedInstance, sqlStr: String, withArgs: [AnyObject]) throws -> [SDRow] {
 
         var result = [SDRow] ()
         let task: () throws -> Void = {
 			defer {
-				SQLiteDB.sharedInstance.close()
+				db.close()
 			}
-			if let err = SQLiteDB.sharedInstance.open() {
-				throw SD.SDError.SQLITE3(code: err)
-			}
-            result = try SQLiteDB.sharedInstance.executeQuery(sqlStr: sqlStr, withArgs: withArgs)
+			try db.open()
+            result = try db.executeQuery(sqlStr: sqlStr, withArgs: withArgs)
         }
-        try putOnThread(task: task)
+        try putOnThread(db, task: task)
         return result
 
     }
@@ -217,14 +221,12 @@ public struct SwiftData {
      :param: closure  A closure containing functions that will be executed on the custom connection
      :returns:        An Int with the error code, or nil if there was no error
      */
-    public static func executeWithConnection(flags: SD.Flags, closure: ()->Void) throws -> Void {
+    public static func executeWithConnection(_ db: SQLiteDB = .sharedInstance, flags: SD.Flags, closure: ()->Void) throws -> Void {
 
         let task: () throws -> Void = {
-            if let err = SQLiteDB.sharedInstance.openWithFlags(flags: flags.toSQL()) {
-				throw SD.SDError.SQLITE3(code: err)
-            }
+            try db.openWithFlags(flags: flags.toSQL())
             closure()
-            try SQLiteDB.sharedInstance.closeCustomConnection()
+            try db.closeCustomConnection()
         }
         try putOnThread(task: task)
 
@@ -242,8 +244,8 @@ public struct SwiftData {
 
      :returns:    The escaped value as a String, ready to be inserted into a SQL statement. Note: Single quotes (') will be placed around the entire value, if necessary.
      */
-    public static func escapeValue(obj: AnyObject?) -> String {
-        return SQLiteDB.sharedInstance.escapeValue(obj: obj)
+    public static func escapeValue(_ db: SQLiteDB = .sharedInstance, obj: AnyObject?) -> String {
+        return db.escapeValue(obj: obj)
     }
 
     /**
@@ -253,8 +255,8 @@ public struct SwiftData {
 
      :returns:    The escaped identifier as a String, ready to be inserted into a SQL statement. Note: Double quotes (") will be placed around the entire identifier.
      */
-    public static func escapeIdentifier(obj: String) -> String {
-        return SQLiteDB.sharedInstance.escapeIdentifier(obj: obj)
+    public static func escapeIdentifier(_ db: SQLiteDB = .sharedInstance, obj: String) -> String {
+        return db.escapeIdentifier(obj: obj)
     }
 
 
@@ -271,18 +273,16 @@ public struct SwiftData {
 
      :returns:                     An Int with the error code, or nil if there was no error
      */
-    public static func createTable(table: String, withColumnNamesAndTypes values: [String: SwiftData.DataType]) throws -> Void {
+    public static func createTable(_ db: SQLiteDB = .sharedInstance, table: String, withColumnNamesAndTypes values: [String: SwiftData.DataType]) throws -> Void {
 
         let task: () throws -> Void = {
 			defer {
-				SQLiteDB.sharedInstance.close()
+				db.close()
 			}
-			if let err = SQLiteDB.sharedInstance.open() {
-				throw SD.SDError.SQLITE3(code: err)
-			}
-            try SQLiteDB.sharedInstance.createSQLTable(table: table, withColumnsAndTypes: values)
+			try db.open()
+            try db.createSQLTable(table: table, withColumnsAndTypes: values)
         }
-        try putOnThread(task: task)
+        try putOnThread(db, task: task)
 
     }
 
@@ -295,18 +295,16 @@ public struct SwiftData {
 
      :returns:       An Int with the error code, or nil if there was no error
      */
-    public static func deleteTable(table: String) throws -> Void {
+    public static func deleteTable(_ db: SQLiteDB = .sharedInstance, table: String) throws -> Void {
 
         let task: () throws -> Void = {
 			defer {
-				SQLiteDB.sharedInstance.close()
+				db.close()
 			}
-			if let err = SQLiteDB.sharedInstance.open() {
-				throw SD.SDError.SQLITE3(code: err)
-			}
-            try SQLiteDB.sharedInstance.deleteSQLTable(table: table)
+			try db.open()
+            try db.deleteSQLTable(table: table)
         }
-        try putOnThread(task: task)
+        try putOnThread(db, task: task)
 
     }
 
@@ -318,17 +316,15 @@ public struct SwiftData {
 
      :returns:  A tuple containing an Array of all existing SQLite table names, and an Int with the error code or nil if there was no error
      */
-    public static func existingTables() throws -> [String] {
+    public static func existingTables(_ db: SQLiteDB = .sharedInstance) throws -> [String] {
 
         var result = [String] ()
         let task: () throws -> Void = {
-            if let err = SQLiteDB.sharedInstance.open() {
-				throw SD.SDError.SQLITE3(code: err)
-            }
-            result = try SQLiteDB.sharedInstance.existingTables()
-            SQLiteDB.sharedInstance.close()
+            try db.open()
+            result = try db.existingTables()
+            db.close()
         }
-        try putOnThread(task: task)
+        try putOnThread(db, task: task)
         return result
 
     }
@@ -350,8 +346,8 @@ public struct SwiftData {
 
      :returns:  The path to the SwiftData database
      */
-    public static func databasePath() -> String {
-        return SQLiteDB.sharedInstance.dbPath
+    public static func databasePath(_ db: SQLiteDB = .sharedInstance) -> String {
+        return db.dbPath
     }
 
     /**
@@ -362,19 +358,17 @@ public struct SwiftData {
 
      :returns:  A tuple of he ID of the last successfully inserted row's, and an Int of the error code or nil if there was no error
      */
-    public static func lastInsertedRowID() throws -> Int {
+    public static func lastInsertedRowID(_ db: SQLiteDB = .sharedInstance) throws -> Int {
 
         var result = 0
         let task: () throws -> Void = {
 			defer {
-				SQLiteDB.sharedInstance.close()
+				db.close()
 			}
-			if let err = SQLiteDB.sharedInstance.open() {
-				throw SD.SDError.SQLITE3(code: err)
-			}
-            result = SQLiteDB.sharedInstance.lastInsertedRowID()
+			try db.open()
+            result = db.lastInsertedRowID()
         }
-        try putOnThread(task: task)
+        try putOnThread(db, task: task)
         return result
 
     }
@@ -387,19 +381,17 @@ public struct SwiftData {
 
      :returns:  A tuple of the number of rows modified by the most recently completed SQLite statement, and an Int with the error code or nil if there was no error
      */
-    public static func numberOfRowsModified() throws -> Int {
+    public static func numberOfRowsModified(_ db: SQLiteDB = .sharedInstance) throws -> Int {
 
         var result = 0
         let task: () throws -> Void = {
 			defer {
-				SQLiteDB.sharedInstance.close()
+				db.close()
 			}
-			if let err = SQLiteDB.sharedInstance.open() {
-				throw SD.SDError.SQLITE3(code: err)
-			}
-            result = try SQLiteDB.sharedInstance.numberOfRowsModified()
+			try db.open()
+            result = db.numberOfRowsModified()
         }
-        try putOnThread(task: task)
+        try putOnThread(db, task: task)
         return result
 
     }
@@ -420,18 +412,16 @@ public struct SwiftData {
 
      :returns:          An Int with the error code, or nil if there was no error
      */
-    public static func createIndex(name: String, onColumns: [String], inTable: String, isUnique: Bool = false) throws -> Void {
+    public static func createIndex(_ db: SQLiteDB = .sharedInstance, name: String, onColumns: [String], inTable: String, isUnique: Bool = false) throws -> Void {
 
         let task: () throws -> Void = {
 			defer {
-				SQLiteDB.sharedInstance.close()
+				db.close()
 			}
-            if let err = SQLiteDB.sharedInstance.open() {
-				throw SD.SDError.SQLITE3(code: err)
-            }
-            try SQLiteDB.sharedInstance.createIndex(name: name, columns: onColumns, table: inTable, unique: isUnique)
+            try db.open()
+            try db.createIndex(name: name, columns: onColumns, table: inTable, unique: isUnique)
         }
-        try putOnThread(task: task)
+        try putOnThread(db, task: task)
 
     }
 
@@ -444,18 +434,16 @@ public struct SwiftData {
 
      :returns:          An Int with the error code, or nil if there was no error
      */
-    public static func removeIndex(indexName: String) throws -> Void {
+    public static func removeIndex(_ db: SQLiteDB = .sharedInstance, indexName: String) throws -> Void {
 
         let task: () throws -> Void = {
 			defer {
-				SQLiteDB.sharedInstance.close()
+				db.close()
 			}
-            if let err = SQLiteDB.sharedInstance.open() {
-				throw SD.SDError.SQLITE3(code: err)
-			}
-            try SQLiteDB.sharedInstance.removeIndex(name: indexName)
+            try db.open()
+            try db.removeIndex(name: indexName)
         }
-        try putOnThread(task: task)
+        try putOnThread(db, task: task)
 
     }
 
@@ -467,20 +455,17 @@ public struct SwiftData {
 
      :returns:  A tuple containing an Array of all existing index names on the SQLite database, and an Int with the error code or nil if there was no error
      */
-    public static func existingIndexes() throws -> [String] {
+    public static func existingIndexes(_ db: SQLiteDB = .sharedInstance) throws -> [String] {
 
         var result = [String] ()
-        var error: Int? = nil
         let task: () throws -> Void = {
 			defer {
-				SQLiteDB.sharedInstance.close()
+				db.close()
 			}
-            if let err = SQLiteDB.sharedInstance.open() {
-				throw SD.SDError.SQLITE3(code: err)
-            }
-            result = try SQLiteDB.sharedInstance.existingIndexes()
+            try db.open()
+            result = try db.existingIndexes()
         }
-        try putOnThread(task: task)
+        try putOnThread(db, task: task)
         return result
 
     }
@@ -495,20 +480,18 @@ public struct SwiftData {
 
      :returns:       A tuple containing an Array of all existing index names in the table, and an Int with the error code or nil if there was no error
      */
-    public static func existingIndexesForTable(table: String) throws -> [String] {
+    public static func existingIndexesForTable(_ db: SQLiteDB = .sharedInstance, table: String) throws -> [String] {
 
         var result = [String] ()
         let task: () throws -> Void = {
 			defer {
-				SQLiteDB.sharedInstance.close()
+				db.close()
 			}
 
-            if let err = SQLiteDB.sharedInstance.open() {
-				throw SD.SDError.SQLITE3(code: err)
-            }
-            result = try SQLiteDB.sharedInstance.existingIndexesForTable(table: table)
+            try db.open()
+            result = try db.existingIndexesForTable(table: table)
         }
-        try putOnThread(task: task)
+        try putOnThread(db, task: task)
         return result
 
     }
@@ -528,23 +511,20 @@ public struct SwiftData {
 
      :returns:                   An Int with the error code, or nil if there was no error committing or rolling back the transaction
      */
-    public static func transaction(transactionClosure: ()->Bool) throws -> Void {
+    public static func transaction(_ db: SQLiteDB = .sharedInstance, transactionClosure: () -> Bool) throws -> Void {
 
-        var error: Int? = nil
         let task: () throws -> Void = {
 			defer {
-				SQLiteDB.sharedInstance.close()
+                db.close()
 			}
 
-            if let err = SQLiteDB.sharedInstance.open() {
-				throw SD.SDError.SQLITE3(code: err)
-            }
-			try SQLiteDB.sharedInstance.beginTransaction()
+            try db.open()
+			try db.beginTransaction()
 			if transactionClosure() {
 				do {
-					try SQLiteDB.sharedInstance.commitTransaction()
+					try db.commitTransaction()
 				} catch {
-					try SQLiteDB.sharedInstance.rollbackTransaction()
+					try db.rollbackTransaction()
 				}
 			}
 //            if let err = SQLiteDB.sharedInstance.beginTransaction() {
@@ -563,7 +543,7 @@ public struct SwiftData {
 //            }
 //            SQLiteDB.sharedInstance.close()
         }
-        try putOnThread(task: task)
+        try putOnThread(db, task: task)
 //        return error
 
     }
@@ -581,29 +561,24 @@ public struct SwiftData {
 
      :returns:                 An Int with the error code, or nil if there was no error releasing or rolling back the savepoint
      */
-    public static func savepoint(savepointClosure: ()->Bool) throws -> Void {
+    public static func savepoint(_ db: SQLiteDB = .sharedInstance, savepointClosure: ()->Bool) throws -> Void {
 
-        var error: Int? = nil
         let task: () throws -> Void = {
 			defer {
-				SQLiteDB.sharedInstance.close()
+				db.close()
 			}
 
-            if let err = SQLiteDB.sharedInstance.open() {
-				throw SD.SDError.SQLITE3(code: err)
-//                error = err
-//                return
-            }
-			try SQLiteDB.sharedInstance.beginSavepoint()
+            try db.open()
+			try db.beginSavepoint()
 			if savepointClosure() {
-				try SQLiteDB.sharedInstance.releaseSavepoint()
+				try db.releaseSavepoint()
 			} else {
 				do {
-					try SQLiteDB.sharedInstance.rollbackTransaction()
+					try db.rollbackTransaction()
 				} catch {
-					SQLiteDB.sharedInstance.savepointsOpen -= 1
+					db.savepointsOpen -= 1
 				}
-				try SQLiteDB.sharedInstance.releaseSavepoint()
+				try db.releaseSavepoint()
 			}
 //            if let err = SQLiteDB.sharedInstance.beginSavepoint() {
 //                SQLiteDB.sharedInstance.close()
@@ -628,7 +603,7 @@ public struct SwiftData {
 //            }
 //            SQLiteDB.sharedInstance.close()
         }
-		try SD.putOnThread(task: task)
+		try putOnThread(db, task: task)
 //        return error
 
     }
@@ -692,9 +667,13 @@ public struct SwiftData {
     //NOTE: remove private level
     public class SQLiteDB {
 
+        // Singletone instance used in static functions, you can create your own instance also
         public static let sharedInstance: SQLiteDB = SQLiteDB()
+
+        //MARK: - Instance members
+
         var sqliteDB: OpaquePointer? = nil
-        public var dbPath = SQLiteDB.createPath()
+        var dbPath = SQLiteDB.createPath()
         var inTransaction = false
         var isConnected = false
         var openWithFlags = false
@@ -702,9 +681,20 @@ public struct SwiftData {
         //let queue = dispatch_queue_create("SwiftData.DatabaseQueue", DISPATCH_QUEUE_SERIAL)
         let queue = DispatchQueue(label: "SwiftData.DatabaseQueue")
 
-		public init() {
-			
+        public init(_ dbPath: String? = nil) {
+            if let _ = dbPath {
+                self.dbPath = dbPath!
+            }
 		}
+
+        deinit {
+            print("\(#function)")
+            if self.openWithFlags {
+                try? self.closeCustomConnection()
+            } else {
+                self.close()
+            }
+        }
 
         // MARK: - Database Handling Functions
 
@@ -727,82 +717,80 @@ public struct SwiftData {
 			let status = sqlite3_open_v2(dbPath.cString(using: .utf8)!, &sqliteDB, inFlags, nil)
 			if status != SQLITE_OK {
 				print("SwiftData Error -> During: Opening Database")
-				print("                -> Code: \(status) - " + SDError.message(code: Int(status)))
-				if let sqliteDB = SQLiteDB.sharedInstance.sqliteDB {
+                print("                -> Code: \(status) - " + SDError.message(code: Int(status)))
+				if let sqliteDB = self.sqliteDB {
 					let errMsg = String(cString: sqlite3_errmsg(sqliteDB))
 					print("                -> Details: \(errMsg)")
 				}
-				throw SDError.SQLITE3(code: Int(status))
+                throw SDError.error(code: status)
 			}
 			isConnected = true
 			return
 		}
 
         //open a connection to the sqlite3 database
-        func open() -> Int? {
+        public func open() throws -> Void {
 
             if inTransaction || openWithFlags || savepointsOpen > 0 {
-                return nil
+                return
             }
             if sqliteDB != nil || isConnected {
-                return nil
+                return
             }
             let status = sqlite3_open(dbPath.cString(using: .utf8)!, &sqliteDB)
             if status != SQLITE_OK {
                 print("SwiftData Error -> During: Opening Database")
                 print("                -> Code: \(status) - " + SDError.message(code: Int(status)))
-                if let sqliteDB = SQLiteDB.sharedInstance.sqliteDB {
+                if let sqliteDB = self.sqliteDB {
                     let errMsg = String(cString: sqlite3_errmsg(sqliteDB))
                     print("                -> Details: \(errMsg)")
                 }
-                return Int(status)
+                throw SD.SDError.error(code: status)
             }
             isConnected = true
-            return nil
 
         }
 
         //open a connection to the sqlite3 database with flags
-        func openWithFlags(flags: Int32) -> Int? {
+        public func openWithFlags(flags: Int32) throws -> Void {
 
             if inTransaction {
                 print("SwiftData Error -> During: Opening Database with Flags")
                 print("                -> Code: 302 - Cannot open a custom connection inside a transaction")
-                return 302
+                throw SD.SDError.error(code: 302)
             }
             if openWithFlags {
                 print("SwiftData Error -> During: Opening Database with Flags")
                 print("                -> Code: 301 - A custom connection is already open")
-                return 301
+                throw SD.SDError.error(code: 301)
             }
             if savepointsOpen > 0 {
                 print("SwiftData Error -> During: Opening Database with Flags")
                 print("                -> Code: 303 - Cannot open a custom connection inside a savepoint")
-                return 303
+                throw SD.SDError.error(code: 303)
             }
             if isConnected {
                 print("SwiftData Error -> During: Opening Database with Flags")
                 print("                -> Code: 301 - A custom connection is already open")
-                return 301
+                throw SD.SDError.error(code: 301)
             }
             let status = sqlite3_open_v2(dbPath.cString(using: .utf8)!, &sqliteDB, flags, nil)
             if status != SQLITE_OK {
                 print("SwiftData Error -> During: Opening Database with Flags")
                 print("                -> Code: \(status) - " + SDError.message(code: Int(status)))
-                if let sqliteDB = SQLiteDB.sharedInstance.sqliteDB {
+                if let sqliteDB = self.sqliteDB {
                     let errMsg = String(cString: sqlite3_errmsg(sqliteDB))
                     print("                -> Details: \(errMsg)")
                 }
-                return Int(status)
+                throw SD.SDError.error(code: status)
             }
             isConnected = true
             openWithFlags = true
-            return nil
 
         }
 
         //close the connection to to the sqlite3 database
-        func close() {
+        public func close() {
 
             if inTransaction || openWithFlags || savepointsOpen > 0 {
                 return
@@ -814,7 +802,7 @@ public struct SwiftData {
             if status != SQLITE_OK {
                 print("SwiftData Error -> During: Closing Database")
                 print("                -> Code: \(status) - " + SDError.message(code: Int(status)))
-                if let sqliteDB = SQLiteDB.sharedInstance.sqliteDB {
+                if let sqliteDB = self.sqliteDB {
                     let errMsg = String(cString: sqlite3_errmsg(sqliteDB))
                     print("                -> Details: \(errMsg)")
                 }
@@ -825,22 +813,22 @@ public struct SwiftData {
         }
 
         //close a custom connection to the sqlite3 database
-        func closeCustomConnection() throws -> Void {
+        public func closeCustomConnection() throws -> Void {
 
             if inTransaction {
                 print("SwiftData Error -> During: Closing Database with Flags")
                 print("                -> Code: 305 - Cannot close a custom connection inside a transaction")
-				throw SD.SDError.SQLITE3(code: 305)
+				throw SD.SDError.SQLITE(code: 305)
             }
             if savepointsOpen > 0 {
                 print("SwiftData Error -> During: Closing Database with Flags")
                 print("                -> Code: 306 - Cannot close a custom connection inside a savepoint")
-				throw SD.SDError.SQLITE3(code: 306)
+				throw SD.SDError.SQLITE(code: 306)
             }
             if !openWithFlags {
                 print("SwiftData Error -> During: Closing Database with Flags")
                 print("                -> Code: 304 - A custom connection is not currently open")
-				throw SD.SDError.SQLITE3(code: 304)
+				throw SD.SDError.SQLITE(code: 304)
             }
             let status = sqlite3_close(sqliteDB)
             sqliteDB = nil
@@ -849,19 +837,19 @@ public struct SwiftData {
             if status != SQLITE_OK {
                 print("SwiftData Error -> During: Closing Database with Flags")
 				print("                -> Code: \(status) - " + SDError.message(code: Int(status)))
-                if let sqliteDB = SQLiteDB.sharedInstance.sqliteDB {
+                if let sqliteDB = self.sqliteDB {
                     let errMsg = String(cString: sqlite3_errmsg(sqliteDB))
                     print("                -> Details: \(errMsg)")
                 }
-				throw SD.SDError.SQLITE(code: status)
+                throw SD.SDError.error(code: status)
             }
 
         }
 
-        //create the database path
+        //create the database path, in library for some privacy
         class func createPath() -> String {
 
-            let docsPath = NSSearchPathForDirectoriesInDomains(.documentDirectory, .userDomainMask, true)[0] as String
+            let docsPath = NSSearchPathForDirectoriesInDomains(.libraryDirectory, .userDomainMask, true)[0] as String
             let databaseStr = "SwiftData.sqlite"
             let dbPath = docsPath.appending("/\(databaseStr)")
             return dbPath
@@ -869,7 +857,7 @@ public struct SwiftData {
         }
 
         //begin a transaction
-        func beginTransaction() throws -> Void {
+        public func beginTransaction() throws -> Void {
 
             if savepointsOpen > 0 {
                 print("SwiftData Error -> During: Beginning Transaction")
@@ -893,7 +881,7 @@ public struct SwiftData {
         }
 
         //rollback a transaction
-        func rollbackTransaction() throws -> Void {
+        public func rollbackTransaction() throws -> Void {
 
 //            let error = executeChange(sqlStr: "ROLLBACK")
 //            inTransaction = false
@@ -911,7 +899,7 @@ public struct SwiftData {
         }
 
         //commit a transaction
-        func commitTransaction() throws -> Void {
+        public func commitTransaction() throws -> Void {
 
 //            let error = executeChange(sqlStr: "COMMIT")
 //            inTransaction = false
@@ -937,7 +925,7 @@ public struct SwiftData {
         }
 
         //begin a savepoint
-        func beginSavepoint() throws -> Void {
+        public func beginSavepoint() throws -> Void {
 
 //            if let error = executeChange(sqlStr: "SAVEPOINT 'savepoint\(savepointsOpen + 1)'") {
 //                return error
@@ -955,7 +943,7 @@ public struct SwiftData {
         }
 
         //rollback a savepoint
-        func rollbackSavepoint() throws -> Void {
+        public func rollbackSavepoint() throws -> Void {
             //return executeChange(sqlStr: "ROLLBACK TO 'savepoint\(savepointsOpen)'")
 			do {
 				try executeChange(sqlStr: "ROLLBACK TO 'savepoint\(savepointsOpen)'")
@@ -965,7 +953,7 @@ public struct SwiftData {
         }
 
         //release a savepoint
-        func releaseSavepoint() throws -> Void {
+        public func releaseSavepoint() throws -> Void {
 
 //            let error = executeChange(sqlStr: "RELEASE 'savepoint\(savepointsOpen)'")
 //            savepointsOpen -= 1
@@ -980,13 +968,13 @@ public struct SwiftData {
         }
 
         //get last inserted row id
-        func lastInsertedRowID() -> Int {
+        public func lastInsertedRowID() -> Int {
             let id = sqlite3_last_insert_rowid(sqliteDB)
             return Int(id)
         }
 
         //number of rows changed by last update
-        func numberOfRowsModified() -> Int {
+        public func numberOfRowsModified() -> Int {
             return Int(sqlite3_changes(sqliteDB))
         }
 
@@ -1041,7 +1029,7 @@ public struct SwiftData {
         // MARK: SQLite Execution Functions
 
         //execute a SQLite update from a SQL String
-        func executeChange(sqlStr: String, withArgs: [AnyObject]? = nil) throws -> Void {
+        public func executeChange(sqlStr: String, withArgs: [AnyObject]? = nil) throws -> Void {
 
             var sql = sqlStr
             if let args = withArgs {
@@ -1052,33 +1040,34 @@ public struct SwiftData {
 				}
             }
             var pStmt: OpaquePointer? = nil
-            var status = sqlite3_prepare_v2(SQLiteDB.sharedInstance.sqliteDB, sql, -1, &pStmt, nil)
+            var status = sqlite3_prepare_v2(self.sqliteDB, sql, -1, &pStmt, nil)
             if status != SQLITE_OK {
                 print("SwiftData Error -> During: SQL Prepare")
 				print("                -> Code: \(status) - " + SDError.message(code: Int(status)))
-                if let sqliteDB = SQLiteDB.sharedInstance.sqliteDB {
+                print("                -> sql: \(sql)")
+                if let sqliteDB = self.sqliteDB {
                     let errMsg = String(cString: sqlite3_errmsg(sqliteDB))
                     print("                -> Details: \(errMsg)")
                 }
                 sqlite3_finalize(pStmt)
-				throw SD.SDError.SQLITE3(code: Int(status))
+				throw SD.SDError.error(code: status)
             }
             status = sqlite3_step(pStmt)
             if status != SQLITE_DONE && status != SQLITE_OK {
                 print("SwiftData Error -> During: SQL Step")
 				print("                -> Code: \(status) - " + SDError.message(code: Int(status)))
-                if let db = sqlite3_errmsg(SQLiteDB.sharedInstance.sqliteDB) {
+                if let db = sqlite3_errmsg(self.sqliteDB) {
                     let errMsg = String(cString: db)
                     print("                -> Details: \(errMsg)")
                 }
                 sqlite3_finalize(pStmt)
-				throw SD.SDError.SQLITE3(code: Int(status))
+				throw SD.SDError.error(code: status)
             }
             sqlite3_finalize(pStmt)
         }
 
         //execute a SQLite query from a SQL String
-        func executeQuery(sqlStr: String, withArgs: [AnyObject]? = nil) throws -> [SDRow] {
+        public func executeQuery(sqlStr: String, withArgs: [AnyObject]? = nil) throws -> [SDRow] {
 
             var resultSet = [SDRow]()
             var sql = sqlStr
@@ -1090,12 +1079,12 @@ public struct SwiftData {
 				}
             }
             var pStmt: OpaquePointer? = nil
-            var status = sqlite3_prepare_v2(SQLiteDB.sharedInstance.sqliteDB, sql, -1, &pStmt, nil)
+            var status = sqlite3_prepare_v2(self.sqliteDB, sql, -1, &pStmt, nil)
             if status != SQLITE_OK {
-				let error = SDError.SQLITE(code: status)
+                let error: SD.SDError = .error(code: status)
                 print("SwiftData Error -> During: SQL Prepare")
 				print("                -> Code: \(status) - " + SDError.message(code: Int(status)))
-                if let db = SQLiteDB.sharedInstance.sqliteDB {
+                if let db = self.sqliteDB {
                     let errMsg = String(cString: sqlite3_errmsg(db))
                     print("                -> Details: \(errMsg)")
                 }
@@ -1147,10 +1136,10 @@ public struct SwiftData {
                 } else if status == SQLITE_DONE {
                     next = false
                 } else {
-					let error = SDError.SQLITE(code: status)
+                    let error: SD.SDError = .error(code: status)
                     print("SwiftData Error -> During: SQL Step")
 					print("                -> Code: \(status) - " + SDError.message(code: Int(status)))
-                    if let db = sqlite3_errmsg(SQLiteDB.sharedInstance.sqliteDB) {
+                    if let db = sqlite3_errmsg(self.sqliteDB) {
                         let errMsg = String(cString: db)
                         print("                -> Details: \(errMsg)")
                     }
@@ -1162,6 +1151,16 @@ public struct SwiftData {
             sqlite3_finalize(pStmt)
             //return (resultSet, nil)
 			return resultSet
+        }
+
+        func putOnThread(task: () throws ->Void) throws {
+            if self.inTransaction || self.savepointsOpen > 0 || self.openWithFlags {
+                try task()
+            } else {
+                try self.queue.sync() {
+                    try task()
+                }
+            }
         }
 
     }
@@ -1279,14 +1278,15 @@ public struct SwiftData {
 // MARK: - Threading
 extension SwiftData {
 
-    private static func putOnThread(task: () throws ->Void) throws {
-        if SQLiteDB.sharedInstance.inTransaction || SQLiteDB.sharedInstance.savepointsOpen > 0 || SQLiteDB.sharedInstance.openWithFlags {
-            try task()
-        } else {
-            try SQLiteDB.sharedInstance.queue.sync() {
-                try task()
-            }
-        }
+    private static func putOnThread(_ db: SQLiteDB = .sharedInstance, task: () throws ->Void) throws {
+        try db.putOnThread(task: task)
+//        if SQLiteDB.sharedInstance.inTransaction || SQLiteDB.sharedInstance.savepointsOpen > 0 || SQLiteDB.sharedInstance.openWithFlags {
+//            try task()
+//        } else {
+//            try SQLiteDB.sharedInstance.queue.sync() {
+//                try task()
+//            }
+//        }
     }
 
 }
@@ -1303,7 +1303,7 @@ extension SwiftData.SQLiteDB {
 		for char in sql {
 			if char == "?" {
 				if bindIndex > objects.count - 1 {
-					let error = SD.SDError.SQLITE3(code: 201)
+					let error = SD.SDError.SQLITE(code: 201)
 					print("SwiftData Error -> During: Object Binding")
 					print("                -> Code: 201 - \(error.message())")
 					throw error
@@ -1313,7 +1313,7 @@ extension SwiftData.SQLiteDB {
 					if let str = objects[bindIndex] as? String {
 						obj = escapeIdentifier(obj: str)
 					} else {
-						let error = SD.SDError.SQLITE3(code: 203)
+						let error = SD.SDError.SQLITE(code: 203)
 						print("SwiftData Error -> During: Object Binding")
 						print("                -> Code: 203 - \(error.message()) at array location: \(bindIndex)")
 						throw error
@@ -1337,7 +1337,7 @@ extension SwiftData.SQLiteDB {
 			}
 		}
 		if bindIndex != objects.count {
-			let error = SD.SDError.SQLITE3(code: 202)
+			let error = SD.SDError.SQLITE(code: 202)
 			print("SwiftData Error -> During: Object Binding")
 			print("                -> Code: 202 - \(error.message())")
 			throw error
@@ -1558,7 +1558,7 @@ public extension SwiftData.SQLiteDB {
     //create a table
     func createSQLTable(table: String, withColumnsAndTypes values: [String: SwiftData.DataType]) throws -> Void {
 
-        var sqlStr = "CREATE TABLE \(table) (ID INTEGER PRIMARY KEY AUTOINCREMENT, "
+        var sqlStr = "CREATE TABLE IF NOT EXISTS \(table) (ID INTEGER PRIMARY KEY AUTOINCREMENT, "
         var firstRun = true
         for value in values {
             if firstRun {
@@ -1568,7 +1568,7 @@ public extension SwiftData.SQLiteDB {
                 sqlStr += ", \(escapeIdentifier(obj: value.0)) \(value.1.toSQL())"
             }
         }
-        sqlStr += ")"
+        sqlStr += ");"
         try executeChange(sqlStr: sqlStr)
 
     }
