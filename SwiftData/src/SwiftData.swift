@@ -29,11 +29,7 @@ import SQLite3
 // MARK: - SwiftData
 public struct SwiftData {
 
-    var db: SQLiteDB
-
-    // MARK: - Public SwiftData Functions
-
-    // MARK: - Execute Statements
+    internal var db: SQLiteDB
 
     // MARK: - Escaping Objects
 
@@ -61,17 +57,8 @@ public struct SwiftData {
         return db.escapeIdentifier(obj: obj)
     }
 
-
-    // MARK: - Tables
-
-    // MARK: - Misc
-
-    // MARK: - Indexes
-
-    // MARK: - Transactions and Savepoints
-
     // MARK: - SQLiteDB Class
-    //NOTE: remove private level
+
     class SQLiteDB {
 
         // Singletone instance used in static functions, you can create your own instance also
@@ -85,7 +72,6 @@ public struct SwiftData {
         var isConnected = false
         var openWithFlags = false
         var savepointsOpen = 0
-        //let queue = dispatch_queue_create("SwiftData.DatabaseQueue", DISPATCH_QUEUE_SERIAL)
         let queue = DispatchQueue(label: "SwiftData.DatabaseQueue")
 
         init(_ dbPath: String? = nil) {
@@ -315,10 +301,6 @@ public struct SwiftData {
         //rollback a transaction
         public func rollbackTransaction() throws -> Void {
 
-//            let error = executeChange(sqlStr: "ROLLBACK")
-//            inTransaction = false
-//            return error
-
 			defer {
 				inTransaction = false
 			}
@@ -332,14 +314,6 @@ public struct SwiftData {
 
         //commit a transaction
         public func commitTransaction() throws -> Void {
-
-//            let error = executeChange(sqlStr: "COMMIT")
-//            inTransaction = false
-//            if let err = error {
-//                _ = rollbackTransaction()
-//                return err
-//            }
-//            return nil
 
 			defer {
 				inTransaction = false
@@ -358,12 +332,6 @@ public struct SwiftData {
 
         //begin a savepoint
         public func beginSavepoint() throws -> Void {
-
-//            if let error = executeChange(sqlStr: "SAVEPOINT 'savepoint\(savepointsOpen + 1)'") {
-//                return error
-//            }
-//            savepointsOpen += 1
-//            return nil
 
 			do {
 				try executeChange(sqlStr: "SAVEPOINT 'savepoint\(savepointsOpen + 1)'")
@@ -386,10 +354,6 @@ public struct SwiftData {
 
         //release a savepoint
         public func releaseSavepoint() throws -> Void {
-
-//            let error = executeChange(sqlStr: "RELEASE 'savepoint\(savepointsOpen)'")
-//            savepointsOpen -= 1
-//            return error
 
 			do {
 				try executeChange(sqlStr: "RELEASE 'savepoint\(savepointsOpen)'")
@@ -718,23 +682,6 @@ public struct SwiftData {
 
 }
 
-// MARK: - Threading
-extension SwiftData {
-    //NOTE: move to SQLiteDB
-//    private static func putOnThread(_ db: SQLiteDB = .sharedInstance, task: () throws ->Void) throws {
-//        try db.putOnThread(task: task)
-//        //        if SQLiteDB.sharedInstance.inTransaction || SQLiteDB.sharedInstance.savepointsOpen > 0 || SQLiteDB.sharedInstance.openWithFlags {
-//        //            try task()
-//        //        } else {
-//        //            try SQLiteDB.sharedInstance.queue.sync() {
-//        //                try task()
-//        //            }
-//        //        }
-//    }
-
-}
-
-
 // MARK: - Escaping And Binding Functions
 extension SwiftData.SQLiteDB {
 
@@ -793,54 +740,6 @@ extension SwiftData.SQLiteDB {
 		}
 		return newSql
 	}
-
-//    func bind(objects: [AnyObject], toSQL sql: String) -> (string: String, error: Int?) {
-//
-//        var newSql = ""
-//        var bindIndex = 0
-//        var i = false
-//        for char in sql {
-//            if char == "?" {
-//                if bindIndex > objects.count - 1 {
-//                    print("SwiftData Error -> During: Object Binding")
-//                    print("                -> Code: 201 - Not enough objects to bind provided")
-//                    return ("", 201)
-//                }
-//                var obj = ""
-//                if i {
-//                    if let str = objects[bindIndex] as? String {
-//                        obj = escapeIdentifier(obj: str)
-//                    } else {
-//                        print("SwiftData Error -> During: Object Binding")
-//                        print("                -> Code: 203 - Object to bind as identifier must be a String at array location: \(bindIndex)")
-//                        return ("", 203)
-//                    }
-//                    //WARN: newSql.endIndex.predecessor() -> newSql.endIndex 可能会报错
-//                    //newSql = newSql.substring(to: newSql.endIndex)
-//                    //let range: Range<String.Index> = newSql.startIndex..<newSql.endIndex
-//                    newSql = String(newSql[newSql.startIndex..<newSql.endIndex])
-//                } else {
-//                    obj = escapeValue(obj: objects[bindIndex])
-//                }
-//                newSql += obj
-//                bindIndex += 1
-//            } else {
-//                newSql.append(char)
-//            }
-//            if char == "i" {
-//                i = true
-//            } else if i {
-//                i = false
-//            }
-//        }
-//        if bindIndex != objects.count {
-//            print("SwiftData Error -> During: Object Binding")
-//            print("                -> Code: 202 - Too many objects to bind provided")
-//            return ("", 202)
-//        }
-//        return (newSql, nil)
-//
-//    }
 
     //return escaped String value of AnyObject
     func escapeValue(obj: AnyObject?) -> String {
@@ -1119,4 +1018,3 @@ extension SwiftData.SQLiteDB {
 }
 
 public typealias SD = SwiftData
-//public typealias SDB = SwiftData.SQLiteDB
